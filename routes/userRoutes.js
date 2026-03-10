@@ -36,6 +36,8 @@ const protect = async (req, res, next) => {
 router.post('/send-otp', UserController.sendOTP);
 router.post('/register', UserController.registerUser);
 router.post('/login', UserController.authUser);
+router.post('/forgot-password', UserController.forgotPassword);
+router.post('/reset-password', UserController.resetPassword);
 router.put('/change-password', protect, UserController.updateUserPassword);
 
 module.exports = router;
