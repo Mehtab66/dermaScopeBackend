@@ -33,9 +33,26 @@ const connectDB = async () => {
         await sequelize.authenticate();
         console.log('MySQL Connected.');
 
+        // Load models and set associations (Patient belongs to User; User has many Patients)
+        const User = require('../models/User');
+        const Patient = require('../models/Patient');
+        User.hasMany(Patient, { foreignKey: 'clinician_id' });
+
         // Sync all models (creates/updates tables automatically)
         await sequelize.sync({ alter: true });
         console.log('Tables synced.');
+
+        // Seed default admin if not exists (email: hussain@admin.com, password: hussain 12)
+        const defaultAdminEmail = 'hussain@admin.com';
+        const existing = await User.findOne({ where: { email: defaultAdminEmail } });
+        if (!existing) {
+            await User.create({
+                email: defaultAdminEmail,
+                password: 'hussain 12',
+                role: 'admin',
+            });
+            console.log('Default admin created:', defaultAdminEmail);
+        }
     } catch (error) {
         console.error('Database connection error:', error.message);
         process.exit(1);

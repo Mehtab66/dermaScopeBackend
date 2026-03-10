@@ -86,7 +86,9 @@ class UserController {
         }
 
         try {
-            const user = await User.create({ email, password });
+            // Mobile signup: default role is clinician
+            const role = (req.body.role === 'admin' ? 'admin' : 'clinician');
+            const user = await User.create({ email, password, role });
 
             // Delete OTP after successful registration
             await OTP.destroy({ where: { email } });
@@ -94,6 +96,7 @@ class UserController {
             res.status(201).json({
                 id: user.id,
                 email: user.email,
+                role: user.role,
                 token: UserController.generateToken(user.id),
             });
         } catch (error) {
@@ -139,10 +142,18 @@ class UserController {
                 return res.status(401).json({ message: 'Invalid email or password' });
             }
 
-            return res.status(200).json({
+            const userPayload = {
                 id: user.id,
                 email: user.email,
-                token: UserController.generateToken(user.id),
+                role: user.role || 'clinician',
+            };
+            const token = UserController.generateToken(user.id);
+            return res.status(200).json({
+                user: userPayload,
+                token,
+                // Top-level email/username so mobile app (authService) can use data.email / data.username
+                email: user.email,
+                username: user.email,
             });
         } catch (err) {
             console.error('Login error:', err);

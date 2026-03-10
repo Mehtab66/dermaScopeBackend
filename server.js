@@ -3,6 +3,8 @@ const express = require('express');
 const cors = require('cors');
 const { connectDB } = require('./config/db');
 const userRoutes = require('./routes/userRoutes');
+const adminRoutes = require('./routes/adminRoutes');
+const patientRoutes = require('./routes/patientRoutes');
 
 const app = express();
 
@@ -22,6 +24,9 @@ app.get('/api/health', (req, res) => {
 });
 
 app.use('/api/users', userRoutes);
+app.use('/api/auth', userRoutes); // same routes for frontend login (e.g. /api/auth/login)
+app.use('/api/admin', adminRoutes);
+app.use('/api/patients', patientRoutes);
 
 const PORT = process.env.PORT || 5000;
 const HOST = '0.0.0.0';
