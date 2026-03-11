@@ -16,22 +16,78 @@ function validatePasswordStrength(password) {
 
 /**
  * GET /api/admin/dashboard-data
- * Returns all clinicians for admin dashboard (admin sees all clinicians and their folder links).
+ * Returns all clinicians for admin/superadmin dashboards, including patient summaries.
+ * Shape per clinician:
+ * {
+ *   id, email, username, role_name, hasFolder,
+ *   totalPatients, totalPhotos,
+ *   patients: [{ id, name, total_photos_clicked, last_clicked, createdAt }]
+ * }
  */
 async function getDashboardData(req, res) {
     try {
-        const users = await User.findAll({
+        // 1) Fetch all clinicians
+        const clinicians = await User.findAll({
             where: { role: 'clinician' },
             attributes: ['id', 'email', 'role', 'createdAt'],
             order: [['email', 'ASC']],
         });
-        const data = users.map((u) => ({
-            id: u.id,
-            email: u.email,
-            username: u.email,
-            role_name: u.role,
-            hasFolder: true,
-        }));
+
+        // 2) Fetch all patients once and group in memory
+        const patients = await Patient.findAll({
+            attributes: [
+                'id',
+                'patient_number',
+                'name',
+                'total_photos_clicked',
+                'last_clicked',
+                'clinician_id',
+                'createdAt',
+            ],
+            order: [['createdAt', 'DESC']],
+        });
+
+        // 3) Create a map of clinician → summary
+        const byClinician = new Map();
+
+        clinicians.forEach((u) => {
+            byClinician.set(u.id, {
+                id: u.id,
+                email: u.email,
+                username: u.email,
+                role_name: u.role,
+                hasFolder: true,
+                createdAt: u.createdAt,
+                totalPatients: 0,
+                totalPhotos: 0,
+                patients: [],
+            });
+        });
+
+        // 4) Attach patients to their clinician summaries
+        patients.forEach((p) => {
+            const group = byClinician.get(p.clinician_id);
+            if (!group) return; // patient linked to non-clinician or missing user
+
+            const id =
+                p.patient_number != null && p.patient_number !== ''
+                    ? String(p.patient_number)
+                    : String(p.id);
+
+            group.patients.push({
+                id,
+                name: p.name,
+                total_photos_clicked: p.total_photos_clicked,
+                last_clicked: p.last_clicked,
+                createdAt: p.createdAt,
+            });
+
+            group.totalPatients += 1;
+            group.totalPhotos += p.total_photos_clicked || 0;
+        });
+
+        // 5) Return clinicians in original email-sorted order
+        const data = clinicians.map((u) => byClinician.get(u.id));
         res.json(data);
     } catch (err) {
         console.error('Dashboard data error:', err);
