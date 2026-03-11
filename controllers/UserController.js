@@ -2,6 +2,7 @@ const User = require('../models/User');
 const OTP = require('../models/OTP');
 const jwt = require('jsonwebtoken');
 const { sendOTP, sendPasswordResetOTP } = require('../utils/emailService');
+const { logAudit, fromRequest } = require('../utils/auditLog');
 const { Op } = require('sequelize');
 const { sequelize } = require('../config/db');
 
@@ -148,6 +149,12 @@ class UserController {
                 role: user.role || 'clinician',
             };
             const token = UserController.generateToken(user.id);
+            logAudit(fromRequest(req, {
+                user_id: user.id,
+                action: 'login',
+                resource_type: 'user',
+                resource_id: String(user.id),
+            }));
             return res.status(200).json({
                 user: userPayload,
                 token,

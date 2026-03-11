@@ -33,26 +33,18 @@ const connectDB = async () => {
         await sequelize.authenticate();
         console.log('MySQL Connected.');
 
-        // Load models and set associations (Patient belongs to User; User has many Patients)
+        // Load models and set associations (load all models so sync creates every table)
         const User = require('../models/User');
         const Patient = require('../models/Patient');
+        const AuditLog = require('../models/AuditLog');
+        require('../models/OTP');
         User.hasMany(Patient, { foreignKey: 'clinician_id' });
+        User.hasMany(AuditLog, { foreignKey: 'user_id' });
 
         // Sync all models (creates/updates tables automatically)
         await sequelize.sync({ alter: true });
         console.log('Tables synced.');
-
-        // Seed default admin if not exists (email: hussain@admin.com, password: hussain 12)
-        const defaultAdminEmail = 'hussain@admin.com';
-        const existing = await User.findOne({ where: { email: defaultAdminEmail } });
-        if (!existing) {
-            await User.create({
-                email: defaultAdminEmail,
-                password: 'hussain 12',
-                role: 'admin',
-            });
-            console.log('Default admin created:', defaultAdminEmail);
-        }
+        // No default users created here; use docs/SEED_SUPERADMIN_ADMIN.md and SQL or one-time script.
     } catch (error) {
         console.error('Database connection error:', error.message);
         process.exit(1);

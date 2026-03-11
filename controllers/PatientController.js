@@ -1,4 +1,5 @@
 const Patient = require('../models/Patient');
+const { logAudit, fromRequest } = require('../utils/auditLog');
 
 /**
  * GET /api/patients – list all patients (array or { patients }).
@@ -47,6 +48,12 @@ async function create(req, res) {
             clinician_id: clinicianId,
             total_photos_clicked: 0,
         });
+        logAudit(fromRequest(req, {
+            action: 'patient_create',
+            resource_type: 'patient',
+            resource_id: String(patient.id),
+            details: JSON.stringify({ patient_number: id, name }),
+        }));
         res.status(201).json({
             id: patient.patient_number != null ? String(patient.patient_number) : String(patient.id),
             name: patient.name,

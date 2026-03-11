@@ -22,11 +22,12 @@ const protect = async (req, res, next) => {
 };
 
 const requireAdmin = (req, res, next) => {
-    if (req.user && req.user.role === 'admin') return next();
+    if (req.user && (req.user.role === 'superadmin' || req.user.role === 'admin')) return next();
     return res.status(403).json({ message: 'Admin access required' });
 };
 
 router.get('/dashboard-data', protect, requireAdmin, AdminController.getDashboardData);
 router.get('/users', protect, requireAdmin, AdminController.getUsers);
+router.get('/stats', protect, requireAdmin, AdminController.getStats);
 
 module.exports = router;

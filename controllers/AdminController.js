@@ -1,4 +1,6 @@
+const { Op } = require('sequelize');
 const User = require('../models/User');
+const Patient = require('../models/Patient');
 
 /**
  * GET /api/admin/dashboard-data
@@ -48,7 +50,26 @@ async function getUsers(req, res) {
     }
 }
 
+/**
+ * GET /api/admin/stats
+ * For superadmin: total admins, clinicians, patients.
+ */
+async function getStats(req, res) {
+    try {
+        const [totalAdmins, totalClinicians, totalPatients] = await Promise.all([
+            User.count({ where: { role: { [Op.in]: ['superadmin', 'admin'] } } }),
+            User.count({ where: { role: 'clinician' } }),
+            Patient.count(),
+        ]);
+        res.json({ totalAdmins, totalClinicians, totalPatients });
+    } catch (err) {
+        console.error('Stats error:', err);
+        res.status(500).json({ message: 'Failed to load stats' });
+    }
+}
+
 module.exports = {
     getDashboardData,
     getUsers,
+    getStats,
 };
