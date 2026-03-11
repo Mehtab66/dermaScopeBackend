@@ -2,12 +2,19 @@ const Patient = require('../models/Patient');
 const { logAudit, fromRequest } = require('../utils/auditLog');
 
 /**
- * GET /api/patients – list all patients (array or { patients }).
- * App normalizes id/patient_id and name/patient_name.
+ * GET /api/patients – list patients.
+ * If caller is clinician: only patients assigned to them (clinician_id = req.user.id).
+ * If caller is admin/superadmin: all patients.
+ * Requires auth (protect middleware).
  */
 async function list(req, res) {
     try {
+        const where = {};
+        if (req.user && req.user.role === 'clinician') {
+            where.clinician_id = req.user.id;
+        }
         const rows = await Patient.findAll({
+            where,
             attributes: ['id', 'patient_number', 'name', 'total_photos_clicked', 'last_clicked', 'clinician_id', 'createdAt'],
             order: [['name', 'ASC']],
         });

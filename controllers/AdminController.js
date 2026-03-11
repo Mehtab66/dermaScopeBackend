@@ -16,8 +16,9 @@ function validatePasswordStrength(password) {
 
 /**
  * GET /api/admin/dashboard-data
- * Returns all clinicians for admin/superadmin dashboards, including patient summaries.
- * Shape per clinician:
+ * Returns clinicians and admins for admin/superadmin dashboards, including patient summaries.
+ * Patients are attached to the user they're assigned to (clinician_id).
+ * Shape per user:
  * {
  *   id, email, username, role_name, hasFolder,
  *   totalPatients, totalPhotos,
@@ -26,9 +27,9 @@ function validatePasswordStrength(password) {
  */
 async function getDashboardData(req, res) {
     try {
-        // 1) Fetch all clinicians
-        const clinicians = await User.findAll({
-            where: { role: 'clinician' },
+        // 1) Fetch clinicians and admins (so dashboard shows both; superadmin excluded)
+        const staff = await User.findAll({
+            where: { role: { [Op.in]: ['clinician', 'admin'] } },
             attributes: ['id', 'email', 'role', 'createdAt'],
             order: [['email', 'ASC']],
         });
@@ -47,11 +48,11 @@ async function getDashboardData(req, res) {
             order: [['createdAt', 'DESC']],
         });
 
-        // 3) Create a map of clinician → summary
-        const byClinician = new Map();
+        // 3) Create a map of user id → summary (so we can attach patients to whoever they're assigned to)
+        const byUser = new Map();
 
-        clinicians.forEach((u) => {
-            byClinician.set(u.id, {
+        staff.forEach((u) => {
+            byUser.set(u.id, {
                 id: u.id,
                 email: u.email,
                 username: u.email,
@@ -64,10 +65,10 @@ async function getDashboardData(req, res) {
             });
         });
 
-        // 4) Attach patients to their clinician summaries
+        // 4) Attach patients to the user they're assigned to (clinician_id)
         patients.forEach((p) => {
-            const group = byClinician.get(p.clinician_id);
-            if (!group) return; // patient linked to non-clinician or missing user
+            const group = byUser.get(p.clinician_id);
+            if (!group) return; // patient linked to missing/non-staff user
 
             const id =
                 p.patient_number != null && p.patient_number !== ''
@@ -83,11 +84,11 @@ async function getDashboardData(req, res) {
             });
 
             group.totalPatients += 1;
-            group.totalPhotos += p.total_photos_clicked || 0;
+            group.totalPhotos += (p.total_photos_clicked || 0);
         });
 
-        // 5) Return clinicians in original email-sorted order
-        const data = clinicians.map((u) => byClinician.get(u.id));
+        // 5) Return staff in original email-sorted order
+        const data = staff.map((u) => byUser.get(u.id));
         res.json(data);
     } catch (err) {
         console.error('Dashboard data error:', err);
