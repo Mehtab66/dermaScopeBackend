@@ -26,8 +26,18 @@ const requireAdmin = (req, res, next) => {
     return res.status(403).json({ message: 'Admin access required' });
 };
 
+const requireSuperAdmin = (req, res, next) => {
+    if (req.user && req.user.role === 'superadmin') return next();
+    return res.status(403).json({ message: 'Superadmin access required' });
+};
+
 router.get('/dashboard-data', protect, requireAdmin, AdminController.getDashboardData);
 router.get('/users', protect, requireAdmin, AdminController.getUsers);
 router.get('/stats', protect, requireAdmin, AdminController.getStats);
+router.get('/next-username', protect, requireAdmin, AdminController.getNextUsername);
+router.post('/add-user', protect, requireAdmin, AdminController.addUser);
+router.put('/update-user/:id', protect, requireAdmin, AdminController.updateUser);
+router.delete('/delete-user/:id', protect, requireAdmin, AdminController.deleteUser);
+router.get('/audit-logs', protect, requireSuperAdmin, AdminController.getAuditLogs);
 
 module.exports = router;
