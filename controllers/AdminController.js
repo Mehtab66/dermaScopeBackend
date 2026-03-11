@@ -3,6 +3,7 @@ const User = require('../models/User');
 const Patient = require('../models/Patient');
 const AuditLog = require('../models/AuditLog');
 const { logAudit, fromRequest } = require('../utils/auditLog');
+const { getPhotoCountForUser } = require('../utils/s3PhotoCount');
 
 function validatePasswordStrength(password) {
     if (!password || typeof password !== 'string') return { ok: false, message: 'Password is required' };
@@ -87,7 +88,21 @@ async function getDashboardData(req, res) {
             group.totalPhotos += (p.total_photos_clicked || 0);
         });
 
-        // 5) Return staff in original email-sorted order
+        // 5) Override totalPhotos with live count from S3 (AWS) per staff
+        await Promise.all(
+            staff.map(async (u) => {
+                const group = byUser.get(u.id);
+                if (!group) return;
+                try {
+                    const s3Count = await getPhotoCountForUser(u.email || u.username);
+                    group.totalPhotos = s3Count;
+                } catch (err) {
+                    console.warn('S3 photo count for', u.email, err.message);
+                }
+            })
+        );
+
+        // 6) Return staff in original email-sorted order
         const data = staff.map((u) => byUser.get(u.id));
         res.json(data);
     } catch (err) {
