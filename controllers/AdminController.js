@@ -136,16 +136,30 @@ async function getUsers(req, res) {
 
 /**
  * GET /api/admin/stats
- * For superadmin: total admins, clinicians, patients.
+ * For superadmin: total admins, clinicians, patients, totalPhotos (from S3).
  */
 async function getStats(req, res) {
     try {
-        const [totalAdmins, totalClinicians, totalPatients] = await Promise.all([
+        const [totalAdmins, totalClinicians, totalPatients, staff] = await Promise.all([
             User.count({ where: { role: { [Op.in]: ['superadmin', 'admin'] } } }),
             User.count({ where: { role: 'clinician' } }),
             Patient.count(),
+            User.findAll({
+                where: { role: { [Op.in]: ['clinician', 'admin'] } },
+                attributes: ['id', 'email'],
+            }),
         ]);
-        res.json({ totalAdmins, totalClinicians, totalPatients });
+        let totalPhotos = 0;
+        await Promise.all(
+            staff.map(async (u) => {
+                try {
+                    totalPhotos += await getPhotoCountForUser(u.email);
+                } catch (e) {
+                    // ignore per-user errors
+                }
+            })
+        );
+        res.json({ totalAdmins, totalClinicians, totalPatients, totalPhotos });
     } catch (err) {
         console.error('Stats error:', err);
         res.status(500).json({ message: 'Failed to load stats' });
