@@ -34,10 +34,14 @@ const protect = async (req, res, next) => {
 };
 
 router.post('/send-otp', UserController.sendOTP);
+router.post('/verify-otp', UserController.verifyOtp);
 router.post('/register', UserController.registerUser);
 router.post('/login', UserController.authUser);
 router.post('/forgot-password', UserController.forgotPassword);
 router.post('/reset-password', UserController.resetPassword);
 router.put('/change-password', protect, UserController.updateUserPassword);
+router.post('/send-change-password-otp', protect, UserController.sendChangePasswordOtp);
+router.post('/verify-change-password-otp', protect, UserController.verifyChangePasswordOtp);
+router.post('/change-password-with-otp', protect, UserController.changePasswordWithOtp);
 
 module.exports = router;

@@ -37,9 +37,12 @@ const connectDB = async () => {
         const User = require('../models/User');
         const Patient = require('../models/Patient');
         const AuditLog = require('../models/AuditLog');
+        const ClinicianPatient = require('../models/ClinicianPatient');
         require('../models/OTP');
+
         User.hasMany(Patient, { foreignKey: 'clinician_id' });
         User.hasMany(AuditLog, { foreignKey: 'user_id' });
+        User.hasMany(ClinicianPatient, { as: 'clinicianPatients', foreignKey: 'clinician_id' });
 
         // Sync all models (creates/updates tables automatically)
         await sequelize.sync({ alter: true });

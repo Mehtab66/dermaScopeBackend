@@ -21,6 +21,7 @@ const protect = async (req, res, next) => {
     if (!token) return res.status(401).json({ message: 'Not authorized, no token' });
 };
 
+router.get('/next-id', protect, PatientController.getNextId);
 router.get('/', protect, PatientController.list);
 router.post('/', protect, PatientController.create);
 

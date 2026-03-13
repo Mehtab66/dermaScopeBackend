@@ -1,7 +1,7 @@
 const User = require('../models/User');
 const OTP = require('../models/OTP');
 const jwt = require('jsonwebtoken');
-const { sendOTP, sendPasswordResetOTP } = require('../utils/emailService');
+const { sendOTP, sendPasswordResetOTP, sendChangePasswordOTP } = require('../utils/emailService');
 const { logAudit, fromRequest } = require('../utils/auditLog');
 const { Op } = require('sequelize');
 const { sequelize } = require('../config/db');
@@ -15,6 +15,7 @@ function validatePasswordStrength(password) {
     if (password.length < 8) return { ok: false, message: 'Password must be at least 8 characters' };
     if (!/[A-Z]/.test(password)) return { ok: false, message: 'Password must contain at least one capital letter' };
     if (!/[!@#$%^&*(),.?":{}|<>_\-+=[\]\\;'`~]/.test(password)) return { ok: false, message: 'Password must contain at least one special character (!@#$%^&* etc.)' };
+    if (!/\d/.test(password)) return { ok: false, message: 'Password must contain at least one digit' };
     return { ok: true };
 }
 
@@ -188,6 +189,91 @@ class UserController {
             return res.json({ message: 'Password changed successfully' });
         } catch (err) {
             console.error('Change password error:', err);
+            return res.status(500).json({ message: 'Failed to change password' });
+        }
+    }
+
+    /** POST /verify-otp: verify OTP for sign-up or forgot-password (no auth). Body: { email, otp }. OTP is stored in otps table. */
+    static async verifyOtp(req, res) {
+        const rawEmail = (req.body && req.body.email) != null ? String(req.body.email).trim() : '';
+        const email = normalizeEmail(rawEmail);
+        const otp = (req.body && req.body.otp) != null ? String(req.body.otp).trim() : '';
+        if (!email || !otp) {
+            return res.status(400).json({ message: 'Please provide email and OTP' });
+        }
+        const otpRecord = await OTP.findOne({
+            where: { email, otp, expiresAt: { [Op.gt]: new Date() } },
+        });
+        if (!otpRecord) {
+            return res.status(400).json({ message: 'Invalid or expired OTP' });
+        }
+        return res.status(200).json({ valid: true, message: 'OTP verified' });
+    }
+
+    /** POST /verify-change-password-otp: verify OTP for change-password flow (protected). Body: { otp }. Uses req.user.email. */
+    static async verifyChangePasswordOtp(req, res) {
+        const otp = (req.body && req.body.otp) != null ? String(req.body.otp).trim() : '';
+        if (!otp) {
+            return res.status(400).json({ message: 'Please provide verification code' });
+        }
+        const user = await User.findByPk(req.user.id);
+        if (!user) return res.status(401).json({ message: 'Not authorized' });
+        const email = (user.email || '').trim().toLowerCase();
+        const otpRecord = await OTP.findOne({
+            where: { email, otp, expiresAt: { [Op.gt]: new Date() } },
+        });
+        if (!otpRecord) {
+            return res.status(400).json({ message: 'Invalid or expired verification code' });
+        }
+        return res.status(200).json({ valid: true, message: 'OTP verified' });
+    }
+
+    /** POST /send-change-password-otp: send OTP to logged-in user's email (protected) */
+    static async sendChangePasswordOtp(req, res) {
+        const user = await User.findByPk(req.user.id);
+        if (!user) return res.status(401).json({ message: 'Not authorized' });
+        const email = (user.email || '').trim().toLowerCase();
+        if (!email) return res.status(400).json({ message: 'No email on account' });
+        const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+        const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+        try {
+            await OTP.destroy({ where: { email } });
+            await OTP.create({ email, otp: otpCode, expiresAt });
+            await sendChangePasswordOTP(email, otpCode);
+            return res.status(200).json({ message: 'Verification code sent to your email' });
+        } catch (err) {
+            console.error('Send change password OTP error:', err);
+            return res.status(500).json({ message: 'Failed to send verification code. Please try again.' });
+        }
+    }
+
+    /** POST /change-password-with-otp: set new password using OTP (protected) */
+    static async changePasswordWithOtp(req, res) {
+        const { otp, newPassword } = req.body || {};
+        const otpStr = (otp != null ? String(otp) : '').trim();
+        if (!otpStr || !newPassword) {
+            return res.status(400).json({ message: 'Please provide verification code and new password' });
+        }
+        const pwdCheck = validatePasswordStrength(newPassword);
+        if (!pwdCheck.ok) {
+            return res.status(400).json({ message: pwdCheck.message });
+        }
+        const user = await User.findByPk(req.user.id);
+        if (!user) return res.status(401).json({ message: 'Not authorized' });
+        const email = (user.email || '').trim().toLowerCase();
+        const otpRecord = await OTP.findOne({
+            where: { email, otp: otpStr, expiresAt: { [Op.gt]: new Date() } },
+        });
+        if (!otpRecord) {
+            return res.status(400).json({ message: 'Invalid or expired verification code' });
+        }
+        try {
+            user.password = newPassword;
+            await user.save();
+            await OTP.destroy({ where: { email } });
+            return res.json({ message: 'Password changed successfully' });
+        } catch (err) {
+            console.error('Change password with OTP error:', err);
             return res.status(500).json({ message: 'Failed to change password' });
         }
     }

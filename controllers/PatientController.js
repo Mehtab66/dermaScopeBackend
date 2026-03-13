@@ -1,5 +1,31 @@
 const Patient = require('../models/Patient');
 const { logAudit, fromRequest } = require('../utils/auditLog');
+/**
+ * GET /api/patients/next-id – next available patient number for this clinician.
+ * Returns { id: "001" } (3-digit string). Protected.
+ */
+async function getNextId(req, res) {
+    try {
+        const clinicianId = req.user && req.user.id;
+        if (!clinicianId) {
+            return res.status(401).json({ message: 'Authorization required' });
+        }
+        const rows = await Patient.findAll({
+            where: { clinician_id: clinicianId },
+            attributes: ['patient_number'],
+        });
+        let maxNum = 0;
+        rows.forEach((p) => {
+            const num = parseInt(p.patient_number, 10);
+            if (!Number.isNaN(num) && num > maxNum) maxNum = num;
+        });
+        const nextId = String(maxNum + 1).padStart(3, '0');
+        res.json({ id: nextId });
+    } catch (err) {
+        console.error('Next patient id error:', err);
+        res.status(500).json({ message: 'Failed to get next patient id' });
+    }
+}
 
 /**
  * GET /api/patients – list patients.
@@ -30,21 +56,34 @@ async function list(req, res) {
 }
 
 /**
- * POST /api/patients – create patient. Body: { id, name }.
- * Uses clinician_id from auth (req.user.id). On duplicate id → 409.
+ * POST /api/patients – create patient. Body: { name } (id auto-assigned as next available).
+ * Optional body: { id, name } for backward compat; if id omitted, backend assigns next id.
+ * Uses clinician_id from auth (req.user.id).
  */
 async function create(req, res) {
     const raw = req.body || {};
-    const id = raw.id != null ? String(raw.id).trim() : '';
+    let id = raw.id != null ? String(raw.id).trim() : '';
     const name = raw.name != null ? String(raw.name).trim() : '';
-    if (!id || !name) {
-        return res.status(400).json({ message: 'id and name are required' });
+    if (!name) {
+        return res.status(400).json({ message: 'name is required' });
     }
     const clinicianId = req.user && req.user.id;
     if (!clinicianId) {
         return res.status(401).json({ message: 'Authorization required to create patients' });
     }
     try {
+        if (!id) {
+            const rows = await Patient.findAll({
+                where: { clinician_id: clinicianId },
+                attributes: ['patient_number'],
+            });
+            let maxNum = 0;
+            rows.forEach((p) => {
+                const num = parseInt(p.patient_number, 10);
+                if (!Number.isNaN(num) && num > maxNum) maxNum = num;
+            });
+            id = String(maxNum + 1).padStart(3, '0');
+        }
         const existing = await Patient.findOne({ where: { patient_number: id } });
         if (existing) {
             return res.status(409).json({ message: 'Patient ID already exists' });
@@ -74,4 +113,4 @@ async function create(req, res) {
     }
 }
 
-module.exports = { list, create };
+module.exports = { list, create, getNextId };
