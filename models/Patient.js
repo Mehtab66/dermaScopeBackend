@@ -10,8 +10,8 @@ const Patient = sequelize.define('Patient', {
     patient_number: {
         type: DataTypes.STRING(255),
         allowNull: true,
-        unique: true,
-        comment: 'App-provided id e.g. "001" for GET/POST /api/patients',
+        // Unique per clinician (enforced by DB composite index with clinician_id)
+        comment: 'App-provided id e.g. "001", unique per clinician',
     },
     name: {
         type: DataTypes.STRING,

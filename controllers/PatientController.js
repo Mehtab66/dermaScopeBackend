@@ -84,7 +84,8 @@ async function create(req, res) {
             });
             id = String(maxNum + 1).padStart(3, '0');
         }
-        const existing = await Patient.findOne({ where: { patient_number: id } });
+        // Ensure uniqueness per clinician (same id allowed for different clinicians)
+        const existing = await Patient.findOne({ where: { patient_number: id, clinician_id: clinicianId } });
         if (existing) {
             return res.status(409).json({ message: 'Patient ID already exists' });
         }
