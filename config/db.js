@@ -44,8 +44,9 @@ const connectDB = async () => {
         User.hasMany(AuditLog, { foreignKey: 'user_id' });
         User.hasMany(ClinicianPatient, { as: 'clinicianPatients', foreignKey: 'clinician_id' });
 
-        // Sync all models (creates/updates tables automatically)
-        await sequelize.sync({ alter: true });
+        // Sync: create tables if missing only. Do not use alter: true (can hit MySQL 64-index limit).
+        // Apply schema changes via Knex migrations instead.
+        await sequelize.sync();
         console.log('Tables synced.');
         // No default users created here; use docs/SEED_SUPERADMIN_ADMIN.md and SQL or one-time script.
     } catch (error) {
@@ -53,5 +54,6 @@ const connectDB = async () => {
         process.exit(1);
     }
 };
+
 
 module.exports = { sequelize, connectDB };

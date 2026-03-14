@@ -1,5 +1,25 @@
 exports.up = async function (knex) {
-  // Drop existing unique indexes on patient_number (there are many duplicates)
+  // Some MySQL versions tie the unique index to a foreign key; we must drop
+  // any FK that depends on this index before dropping or changing it.
+
+  // 1) Drop any FK on patients(patient_number) referencing clinician_patient
+  const [rows] = await knex.raw(`
+    SELECT CONSTRAINT_NAME AS fk_name
+    FROM information_schema.KEY_COLUMN_USAGE
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'patients'
+      AND COLUMN_NAME = 'patient_number'
+      AND REFERENCED_TABLE_NAME = 'clinician_patient'
+    LIMIT 1
+  `);
+  const first = Array.isArray(rows) ? rows[0] : null;
+  const fkName = first ? (first.fk_name || first.FK_NAME) : null;
+  if (fkName) {
+    const safeName = '`' + String(fkName).replace(/`/g, '``') + '`';
+    await knex.raw('ALTER TABLE patients DROP FOREIGN KEY ' + safeName);
+  }
+
+  // 2) Drop existing unique indexes on patient_number (there may be many duplicates)
   const indexNames = [
     'patient_number',
     'patient_number_2',
@@ -23,17 +43,15 @@ exports.up = async function (knex) {
   ];
 
   for (const name of indexNames) {
-    // Ignore errors if an index does not exist
     try {
-      // MySQL syntax for dropping an index
       // eslint-disable-next-line no-await-in-loop
       await knex.raw(`ALTER TABLE patients DROP INDEX \`${name}\``);
     } catch (e) {
-      // console.log(`Index ${name} not found, skipping`);
+      // Index not present, ignore
     }
   }
 
-  // Add composite unique index: each clinician has their own patient_number sequence
+  // 3) Add composite unique index: each clinician has their own patient_number sequence
   await knex.schema.alterTable('patients', (table) => {
     table.unique(['clinician_id', 'patient_number'], 'patients_clinician_patient_number_unique');
   });

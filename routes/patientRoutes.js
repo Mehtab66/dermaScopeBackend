@@ -24,5 +24,6 @@ const protect = async (req, res, next) => {
 router.get('/next-id', protect, PatientController.getNextId);
 router.get('/', protect, PatientController.list);
 router.post('/', protect, PatientController.create);
+router.post('/record-photo', protect, PatientController.recordPhotoCapture);
 
 module.exports = router;

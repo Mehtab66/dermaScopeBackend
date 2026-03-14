@@ -1,4 +1,5 @@
 const Patient = require('../models/Patient');
+const ClinicianPatient = require('../models/ClinicianPatient');
 const { logAudit, fromRequest } = require('../utils/auditLog');
 /**
  * GET /api/patients/next-id – next available patient number for this clinician.
@@ -95,6 +96,15 @@ async function create(req, res) {
             clinician_id: clinicianId,
             total_photos_clicked: 0,
         });
+        // Populate clinician_patient so the link table has one row per clinician-patient pair
+        const num = parseInt(id, 10);
+        const clinicianPatientNumber = Number.isNaN(num) ? 1 : num;
+        await ClinicianPatient.create({
+            clinician_id: clinicianId,
+            patient_id: patient.id,
+            clinician_patient_number: clinicianPatientNumber,
+            total_photos: 0,
+        });
         logAudit(fromRequest(req, {
             action: 'patient_create',
             resource_type: 'patient',
@@ -114,4 +124,49 @@ async function create(req, res) {
     }
 }
 
-module.exports = { list, create, getNextId };
+/**
+ * POST /api/patients/record-photo – record that the clinician captured a photo for a patient.
+ * Body: { patient_number } (e.g. "001"). Updates patients.total_photos_clicked, last_clicked
+ * and clinician_patient.total_photos, last_clicked. Protected.
+ */
+async function recordPhotoCapture(req, res) {
+    const clinicianId = req.user && req.user.id;
+    if (!clinicianId) {
+        return res.status(401).json({ message: 'Authorization required' });
+    }
+    const patientNumber = req.body && req.body.patient_number != null ? String(req.body.patient_number).trim() : '';
+    if (!patientNumber) {
+        return res.status(400).json({ message: 'patient_number is required' });
+    }
+    try {
+        const patient = await Patient.findOne({
+            where: { clinician_id: clinicianId, patient_number: patientNumber },
+        });
+        if (!patient) {
+            return res.status(404).json({ message: 'Patient not found for this clinician' });
+        }
+        const now = new Date();
+        await patient.update({
+            total_photos_clicked: (patient.total_photos_clicked || 0) + 1,
+            last_clicked: now,
+        });
+        const [cp] = await ClinicianPatient.findOrCreate({
+            where: { clinician_id: clinicianId, patient_id: patient.id },
+            defaults: {
+                clinician_patient_number: parseInt(patientNumber, 10) || 1,
+                total_photos: 0,
+                last_clicked: null,
+            },
+        });
+        await cp.update({
+            total_photos: (cp.total_photos || 0) + 1,
+            last_clicked: now,
+        });
+        res.json({ ok: true, total_photos_clicked: patient.total_photos_clicked, last_clicked: now });
+    } catch (err) {
+        console.error('Record photo capture error:', err);
+        res.status(500).json({ message: err.message || 'Failed to record photo capture' });
+    }
+}
+
+module.exports = { list, create, getNextId, recordPhotoCapture };
