@@ -10,6 +10,7 @@ exports.up = async function (knex) {
             table.increments('id').primary();
             table
                 .integer('clinician_id')
+                .unsigned()
                 .notNullable()
                 .references('id')
                 .inTable('users')
